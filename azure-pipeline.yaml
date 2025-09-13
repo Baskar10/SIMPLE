@@ -1,0 +1,95 @@
+trigger:
+  branches:
+    include:
+      - main
+      - dev
+      - feature/*
+
+variables:
+  imageName: simple-interest-calculator
+  registry: baskarasethupathy14    # Replace with your Docker Hub username
+  tag: $(Build.BuildId)
+
+stages:
+
+# =========================
+# Build & Push Stage
+# =========================
+- stage: Build
+  displayName: "Build & Push Docker Image"
+  jobs:
+  - job: Build
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: Checkout@1
+
+    # Install Docker CLI
+    - task: DockerInstaller@0
+
+    # Build and push Docker image to Docker Hub
+    - task: Docker@2
+      displayName: Build and Push Image
+      inputs:
+        command: buildAndPush
+        repository: $(registry)/$(imageName)
+        dockerfile: Dockerfile
+        containerRegistry: 'DockerHub-ServiceConnection' # Docker Hub service connection
+        tags: $(tag)
+
+# =========================
+# Deploy to Dev
+# =========================
+- stage: DeployDev
+  displayName: "Deploy to Dev"
+  dependsOn: Build
+  jobs:
+  - deployment: DeployDev
+    environment: 'Dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: "Deploy to Dev K8s"
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: 'Dev-K8s-ServiceConnection'  # K8s cluster service connection
+              namespace: 'dev'
+              command: apply
+              useConfigurationFile: true
+              configuration: |
+                deployment.yaml
+                service.yaml
+              secretType: 'dockerRegistry'
+              containerRegistryType: 'Other'
+              dockerRegistryEndpoint: 'DockerHub-ServiceConnection'
+
+# =========================
+# Deploy to Acceptance
+# =========================
+- stage: DeployAcceptance
+  displayName: "Deploy to Acceptance"
+  dependsOn: DeployDev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployAcceptance
+    environment: 'Acceptance'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: "Deploy to Acceptance K8s"
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: 'Acceptance-K8s-ServiceConnection'
+              namespace: 'acceptance'
+              command: apply
+              useConfigurationFile: true
+              configuration: |
+                deployment.yaml
+                service.yaml
+              secretType: 'dockerRegistry'
+              containerRegistryType: 'Other'
+              dockerRegistryEndpoint: 'DockerHub-ServiceConnection'

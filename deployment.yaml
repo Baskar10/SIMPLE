@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simple-interest-calculator
+  labels:
+    app: simple-interest-calculator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: calculator
+      app: simple-interest-calculator
   template:
     metadata:
       labels:
-        app: calculator
+        app: simple-interest-calculator
     spec:
       containers:
-      - name: calculator
-        image: simple-interest-calculator:latest
-        imagePullPolicy: Never
+      - name: simple-interest-calculator
+        image: $(registry)/$(imageName):$(tag)   # <-- Dynamic image from pipeline
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
